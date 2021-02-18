@@ -33,10 +33,10 @@ class SitemapController extends Controller
         // update sitemap file as soon as CMS structure changes
         $lastCmsChange = max(NavItem::find()->select(['MAX(timestamp_create) as tc', 'MAX(timestamp_update) as tu'])->asArray()->one());
 
-        if (!file_exists($sitemapFile) || filemtime($sitemapFile) < $lastCmsChange) {
-            $this->buildSitemapfile($sitemapFile);
-        }
-
+//        if (!file_exists($sitemapFile) || filemtime($sitemapFile) < $lastCmsChange) {
+//            $this->buildSitemapfile($sitemapFile);
+//        }
+        $this->buildSitemapfile($sitemapFile);
         return Yii::$app->response->sendFile($sitemapFile, null, [
             'mimeType' => 'text/xml',
             'inline' => true,
@@ -61,15 +61,17 @@ class SitemapController extends Controller
         $sitemap->setMaxUrls(PHP_INT_MAX);
 
         // add entry page
-        $sitemap->addItem($baseUrl);
+//        $sitemap->addItem($baseUrl, null, 'daily', '1.0');
 
         // add luya CMS pages
         if ($this->module->module->hasModule('cms')) {
             $query = $this->getBaseQuery()->with(['navItems', 'navItems.lang']);
 
+
             if (!$this->module->withHidden) {
                 $query->andWhere(['is_hidden' => false]);
             }
+            $query->andWhere(['is_offline' => false]);
 
             $errorPageConfig = Config::findOne(['name' => Config::HTTP_EXCEPTION_NAV_ID]);
             $errorPageId = $errorPageConfig ? $errorPageConfig->value : null;
@@ -82,31 +84,46 @@ class SitemapController extends Controller
                     continue;
                 }
 
+                $isHome = $nav->is_home;
+
                 $urls = [];
                 foreach ($nav->navItems as $navItem) {
                     /** @var NavItem $navItem */
+
 
                     $fullUriPath = $this->getRelativeUriByNavItem($navItem, [$errorPageId]);
 
                     $domain = $this->getDomainForLangIfExists($navItem->lang->short_code);
                     $host = $domain ?? $host;
 
-                    $url = $host
-                        . Yii::$app->menu->buildItemLink($fullUriPath, $navItem->lang->short_code);
+                    $path = Yii::$app->menu->buildItemLink($fullUriPath, $navItem->lang->short_code);
+
+                    $depth = explode('/', $path);
+                    $depth = count($depth);
+
+                    $priority = $depth == 2 ? '0.8' : '0.6';
+
+                    $path = $isHome ? '' : $path.'/';
+                    $priority = $isHome ? '1.0' : $priority;
+                    $url = $host. $path;
 
                     $urls[$navItem->lang->short_code] = $this->module->encodeUrls ? $this->encodeUrl($url) : $url;
+                    $urls = reset($urls);
+                    $lastModified = $navItem->timestamp_update == 0 ? $navItem->timestamp_create : $navItem->timestamp_update;
+
+//                    $lastModified = date('Y-m-d',$lastModified);
+
+                    $sitemap->addItem($urls, $lastModified, 'daily', $priority);
                 }
-                $lastModified = $navItem->timestamp_update == 0 ? $navItem->timestamp_create : $navItem->timestamp_update;
 
                 // add single item with out language alternatives on single language site
-                if ($isSingleLanguageSite && count($urls) === 1) {
-                    $urls = reset($urls);
-                }
-
-                $sitemap->addItem($urls, $lastModified);
+//                if ($isSingleLanguageSite && count($urls) === 1) {
+//                    $urls = reset($urls);
+//                }
+//                $sitemap->addItem($urls, $lastModified, 'daily');
             }
         }
-
+//        exit;
         // write sitemap files
         $sitemap->write();
     }
