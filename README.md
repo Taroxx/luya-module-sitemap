@@ -19,7 +19,7 @@ Currently it only generates sitemap entries for pages created by the CMS module.
 
 For the installation of modules Composer is required.
 
-    composer require cebe/luya-module-sitemap
+    composer require taroxx/luya-module-sitemap
 
 ### Configuration
 
